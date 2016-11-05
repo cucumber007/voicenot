@@ -8,6 +8,7 @@
 
     <style name="ToolBarStyle" parent="AppTheme">
         <item name="android:textColorPrimary">@color/white</item>
+        <item name="android:color">@color/white</item>
     </style>
 
 </resources>

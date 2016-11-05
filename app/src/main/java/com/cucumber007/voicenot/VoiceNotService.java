@@ -15,10 +15,10 @@ import android.speech.tts.UtteranceProgressListener;
 import android.util.Log;
 import android.view.KeyEvent;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 
 
 public class VoiceNotService extends NotificationListenerService implements AudioManager.OnAudioFocusChangeListener  {
@@ -34,15 +34,21 @@ public class VoiceNotService extends NotificationListenerService implements Audi
     TextToSpeech ttsEngine;
     AudioManager audioManager;
     MusicIntentReceiver musicIntentReceiver;
-    List<String> appWhiteList = new ArrayList<String>();
+    Set<String> appWhiteList = new HashSet<>();
 
     private BroadcastReceiver updateSettingsReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            readSettings();
+        }
+    };
+
+    private BroadcastReceiver updateAppWhitelistReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
             SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(context);
-            isServiceActive = settings.getBoolean(MainActivity.PARAMETER_SERVICE_STATUS, false);
-            spellAuthor = settings.getBoolean(MainActivity.PARAMETER_SPELL_TITLE, false);
-            headphonesOnly = settings.getBoolean(MainActivity.PARAMETER_SPELL_HEADPHONES_ONLY, false);
+            appWhiteList = settings.getStringSet(AppWhitelistActivity.PARAMETER_APP_WHITELIST, new HashSet<>());
+            appWhiteList.add(getPackageName());
         }
     };
 
@@ -54,14 +60,19 @@ public class VoiceNotService extends NotificationListenerService implements Audi
         IntentFilter intFilt = new IntentFilter(MainActivity.BROADCAST_SERVICE_UPDATE_SETTINGS);
         registerReceiver(updateSettingsReceiver, intFilt);
 
+        IntentFilter intFilt1 = new IntentFilter(AppWhitelistActivity.BROADCAST_SERVICE_UPDATE_APP_WHITELIST);
+        registerReceiver(updateAppWhitelistReceiver, intFilt1);
+
         musicIntentReceiver = new MusicIntentReceiver();
         IntentFilter filter = new IntentFilter(Intent.ACTION_HEADSET_PLUG);
         registerReceiver(musicIntentReceiver, filter);
 
         audioManager = (AudioManager)this.getSystemService(Context.AUDIO_SERVICE);
 
-        appWhiteList.add("com.vkontakte.android");
-        appWhiteList.add("com.cucumber007.voicenot");
+        //appWhiteList.add("com.vkontakte.android");
+        appWhiteList.add(getPackageName());
+
+        readSettings();
 
         Log.d("cutag", "Service created");
     }
@@ -69,6 +80,13 @@ public class VoiceNotService extends NotificationListenerService implements Audi
     @Override
     public void onDestroy() {
         Log.d("cutag", "Sevice destroyed");
+    }
+
+    private void readSettings() {
+        SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(context);
+        isServiceActive = settings.getBoolean(MainActivity.PARAMETER_SERVICE_STATUS, false);
+        spellAuthor = settings.getBoolean(MainActivity.PARAMETER_SPELL_TITLE, false);
+        headphonesOnly = settings.getBoolean(MainActivity.PARAMETER_SPELL_HEADPHONES_ONLY, true);
     }
 
     public void onTtsInit(int status) {

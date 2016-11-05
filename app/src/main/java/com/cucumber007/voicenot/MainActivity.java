@@ -128,4 +128,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+    @OnClick(R.id.app_whitelist_button)
+    public void onClick3() {
+        startActivity(new Intent(this, AppWhitelistActivity.class));
+    }
 }
