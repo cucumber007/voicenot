@@ -24,7 +24,7 @@
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
             android:text="Service"
-            android:id="@+id/switch1"
+            android:id="@+id/switch_active"
             android:checked="false"
             />
 
@@ -32,20 +32,10 @@
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
             android:text="Spell title"
-            android:id="@+id/switch2"
+            android:id="@+id/switch_title"
             android:layout_marginTop="20dp"
-            android:layout_below="@id/switch1"
+            android:layout_below="@id/switch_active"
             />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textAppearance="?android:attr/textAppearanceSmall"
-            android:text="Check this if VoiceNot don't work:"
-            android:id="@+id/textView2"
-            android:layout_below="@+id/switch2"
-            android:layout_alignParentStart="true"
-            android:layout_marginTop="20dp"/>
 
         <Button
             android:layout_width="wrap_content"
@@ -65,6 +55,25 @@
             android:layout_alignBottom="@+id/permissions_button"
             android:layout_toRightOf="@id/permissions_button"
             />
+
+        <Switch
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="Headphones only"
+            android:id="@+id/switch_headphones"
+            android:layout_below="@+id/switch_title"
+            android:layout_alignParentStart="true"
+            android:layout_marginTop="20dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="?android:attr/textAppearanceSmall"
+            android:text="Check this if VoiceNot don't work:"
+            android:id="@+id/textView2"
+            android:layout_below="@+id/switch_headphones"
+            android:layout_alignParentStart="true"
+            android:layout_marginTop="20dp"/>
     </RelativeLayout>
 
 

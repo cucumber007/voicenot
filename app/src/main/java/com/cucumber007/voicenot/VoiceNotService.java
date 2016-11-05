@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.media.AudioManager;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
@@ -22,14 +23,14 @@ import java.util.Locale;
 
 public class VoiceNotService extends NotificationListenerService implements AudioManager.OnAudioFocusChangeListener  {
 
-    boolean spellAuthor = false;
     boolean isServiceActive = true;
+    boolean spellAuthor = false;
+    boolean headphonesOnly = true;
 
-    boolean earphonesPlugged = false;
+    boolean headphonesPlugged = false;
     boolean wasActive = false;
 
     Context context = this;
-    String message;
     TextToSpeech ttsEngine;
     AudioManager audioManager;
     MusicIntentReceiver musicIntentReceiver;
@@ -38,10 +39,10 @@ public class VoiceNotService extends NotificationListenerService implements Audi
     private BroadcastReceiver updateSettingsReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            isServiceActive = PreferenceManager.getDefaultSharedPreferences(context)
-                    .getBoolean(MainActivity.PARAMETER_SERVICE_STATUS, true);
-            spellAuthor = PreferenceManager.getDefaultSharedPreferences(context)
-                    .getBoolean(MainActivity.PARAMETER_SPELL_TITLE, true);
+            SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(context);
+            isServiceActive = settings.getBoolean(MainActivity.PARAMETER_SERVICE_STATUS, false);
+            spellAuthor = settings.getBoolean(MainActivity.PARAMETER_SPELL_TITLE, false);
+            headphonesOnly = settings.getBoolean(MainActivity.PARAMETER_SPELL_HEADPHONES_ONLY, false);
         }
     };
 
@@ -109,61 +110,53 @@ public class VoiceNotService extends NotificationListenerService implements Audi
         LogUtil.logDebug("Notification got");
         if(isServiceActive) {
 
+            boolean isMessage = false;
             Bundle notification_info = sbn.getNotification().extras;
             String text = notification_info.getString("android.text");
-            String author = notification_info.getString("android.title");
+            String title = notification_info.getString("android.title");
+            if (text == null) text = "";
+            if (title == null) title = "";
 
             String sourceApp = sbn.getPackageName();
 
-            Log.d("cutag", text);
-            if(detectRussian(text+author)) {
-                int tts_result = ttsEngine.setLanguage(new Locale("ru"));
-            }
-            else {
-                int tts_result = ttsEngine.setLanguage(new Locale("en"));
-            }
-
-
-            if (text.length() > 250) text = text.substring(0, 250) + ". Достигнуто ограничение длины сообщения.";
-
-            if(spellAuthor) message = "от " + author + "." + text;
+            String message;
+            if (spellAuthor)
+                if (isMessage)
+                    message = "от " + title + "." + text;
+                else message = title + "." + text;
             else message = text;
 
-            Log.d("cutag", message);
+            if (message.length() > 0) {
 
-            /*wasActive = audioManager.isMusicActive();
-            wasActive = false;
-            if (wasActive) {
-                sendMediaButton(context, KeyEvent.KEYCODE_MEDIA_PAUSE);
-            }*/
+                int tts_result = ttsEngine.setLanguage(new Locale(detectRussian(text + title) ? "ru" : "en"));
 
-            //ЛИСТАЙ ДАЛЬШЕ, А СЮДА НЕ СМОТРИ
-            long time = System.currentTimeMillis();
-            long delta = 0;
-            while (delta < 1000) {
-                delta = System.currentTimeMillis() - time;
+                if (text.length() > 250)
+                    message = text.substring(0, 250) + ". Достигнуто ограничение длины сообщения.";
+
+                //ЛИСТАЙ ДАЛЬШЕ, А СЮДА НЕ СМОТРИ
+                long time = System.currentTimeMillis();
+                long delta = 0;
+                //todo
+                while (delta < 1000) {
+                    delta = System.currentTimeMillis() - time;
+                }
+
+                if ((headphonesPlugged || !headphonesOnly) && appWhiteList.contains(sourceApp)) {
+                    //LogUtil.logDebug("Utterance started");
+                    HashMap<String, String> params = new HashMap<String, String>();
+                    params.put(TextToSpeech.Engine.KEY_PARAM_STREAM, String.valueOf(AudioManager.STREAM_MUSIC));
+                    params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "myID");
+                    ttsEngine.speak(message, TextToSpeech.QUEUE_ADD, params);
+                }
+
             }
-
-            if (earphonesPlugged && appWhiteList.contains(sourceApp)) {
-                LogUtil.logDebug("Utterance started");
-                HashMap<String, String> params = new HashMap<String, String>();
-                params.put(TextToSpeech.Engine.KEY_PARAM_STREAM, String.valueOf(AudioManager.STREAM_MUSIC));
-                params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "myID");
-                ttsEngine.speak(message, TextToSpeech.QUEUE_ADD, params);
-                message = "";
-            }
-
-        /* int result = audioManager.requestAudioFocus(this,
-            AudioManager.STREAM_SYSTEM,
-            AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE);
-        */
         }
     }
 
     @Override
     public void onAudioFocusChange(int focusChange) {
         /*Log.d("cutag", "focus: "+focusChange);
-        if (earphonesPlugged && focusChange == 1) {
+        if (headphonesPlugged && focusChange == 1) {
 
         }*/
     }
@@ -205,15 +198,15 @@ public class VoiceNotService extends NotificationListenerService implements Audi
                 switch (state) {
                     case 0:
                         //Log.d(TAG, "Headset is unplugged");
-                        earphonesPlugged = false;
+                        headphonesPlugged = false;
                         break;
                     case 1:
-                        //Log.d(TAG, "Headset is earphonesPlugged");
-                        earphonesPlugged = true;
+                        //Log.d(TAG, "Headset is headphonesPlugged");
+                        headphonesPlugged = true;
                         break;
                     default:
                         //Log.d(TAG, "I have no idea what the headset state is");
-                        earphonesPlugged = false;
+                        headphonesPlugged = false;
                 }
             }
         }

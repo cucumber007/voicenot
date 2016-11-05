@@ -29,10 +29,14 @@ public class MainActivity extends AppCompatActivity {
 
     public static final String PARAMETER_SERVICE_STATUS = "service_status";
     public static final String PARAMETER_SPELL_TITLE = "spell_title";
+    public static final String PARAMETER_SPELL_HEADPHONES_ONLY = "headphones_only";
+
     public static final String BROADCAST_SERVICE_UPDATE_SETTINGS = "com.cucumber007.update_settings_broadcast";
+
     @BindView(R.id.toolbar) Toolbar toolbar;
-    @BindView(R.id.switch1) Switch switch1;
-    @BindView(R.id.switch2) Switch switch2;
+    @BindView(R.id.switch_active) Switch switchActive;
+    @BindView(R.id.switch_title) Switch switchTitle;
+    @BindView(R.id.switch_headphones) Switch switchHeadphones;
 
 
     @Override
@@ -44,8 +48,9 @@ public class MainActivity extends AppCompatActivity {
 
         settings = PreferenceManager.getDefaultSharedPreferences(this);
 
-        switch1.setChecked(settings.getBoolean(PARAMETER_SERVICE_STATUS, false));
-        switch2.setChecked(settings.getBoolean(PARAMETER_SPELL_TITLE, false));
+        switchActive.setChecked(settings.getBoolean(PARAMETER_SERVICE_STATUS, false));
+        switchTitle.setChecked(settings.getBoolean(PARAMETER_SPELL_TITLE, false));
+        switchHeadphones.setChecked(settings.getBoolean(PARAMETER_SPELL_HEADPHONES_ONLY, false));
 
         startVoiceNotService();
     }
@@ -58,8 +63,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void commitSettings() {
         editor = settings.edit();
-        editor.putBoolean(PARAMETER_SERVICE_STATUS, switch1.isChecked());
-        editor.putBoolean(PARAMETER_SPELL_TITLE, switch2.isChecked());
+        editor.putBoolean(PARAMETER_SERVICE_STATUS, switchActive.isChecked());
+        editor.putBoolean(PARAMETER_SPELL_TITLE, switchTitle.isChecked());
+        editor.putBoolean(PARAMETER_SPELL_HEADPHONES_ONLY, switchHeadphones.isChecked());
         editor.commit();
     }
 
@@ -104,7 +110,7 @@ public class MainActivity extends AppCompatActivity {
     // OnClick
     ///////////////////////////////////////////////////////////////////////////
 
-    @OnClick({R.id.switch1, R.id.switch2})
+    @OnClick({R.id.switch_active, R.id.switch_title, R.id.switch_headphones})
     public void onClick() {
         sendUpdateSettingsBroadcast();
     }
