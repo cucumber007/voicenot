@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.speech.tts.TextToSpeech;
@@ -19,59 +20,62 @@ import java.util.List;
 import java.util.Locale;
 
 
-public class VoiceNotService extends NotificationListenerService implements
-        TextToSpeech.OnInitListener, AudioManager.OnAudioFocusChangeListener  {
+public class VoiceNotService extends NotificationListenerService implements AudioManager.OnAudioFocusChangeListener  {
 
-    boolean active = true;
-    boolean plugged = false;
-    boolean wasActive = false;
     boolean spellAuthor = false;
+    boolean isServiceActive = true;
+
+    boolean earphonesPlugged = false;
+    boolean wasActive = false;
+
     Context context = this;
     String message;
-    TextToSpeech tts;
+    TextToSpeech ttsEngine;
     AudioManager audioManager;
-    MusicIntentReceiver myReceiver;
+    MusicIntentReceiver musicIntentReceiver;
     List<String> appWhiteList = new ArrayList<String>();
 
-    private BroadcastReceiver mMessageReceiver = new BroadcastReceiver() {
+    private BroadcastReceiver updateSettingsReceiver = new BroadcastReceiver() {
         @Override
-        public void onReceive(Context context, Intent intent)  {
-           active = intent.getBooleanExtra("status", true);
-           spellAuthor = intent.getBooleanExtra("spell_author", true);
-           //Log.d("cutag", ""+active+spellAuthor);
+        public void onReceive(Context context, Intent intent) {
+            isServiceActive = PreferenceManager.getDefaultSharedPreferences(context)
+                    .getBoolean(MainActivity.PARAMETER_SERVICE_STATUS, true);
+            spellAuthor = PreferenceManager.getDefaultSharedPreferences(context)
+                    .getBoolean(MainActivity.PARAMETER_SPELL_TITLE, true);
         }
     };
 
+
     @Override
     public void onCreate() {
-        tts = new TextToSpeech(this, this);
+        ttsEngine = new TextToSpeech(this, this::onTtsInit);
 
-        IntentFilter intFilt = new IntentFilter("com.cucumber007.service_status_broadcast");
-        registerReceiver(mMessageReceiver, intFilt);
+        IntentFilter intFilt = new IntentFilter(MainActivity.BROADCAST_SERVICE_UPDATE_SETTINGS);
+        registerReceiver(updateSettingsReceiver, intFilt);
 
-        myReceiver = new MusicIntentReceiver();
+        musicIntentReceiver = new MusicIntentReceiver();
         IntentFilter filter = new IntentFilter(Intent.ACTION_HEADSET_PLUG);
-        registerReceiver(myReceiver, filter);
+        registerReceiver(musicIntentReceiver, filter);
 
         audioManager = (AudioManager)this.getSystemService(Context.AUDIO_SERVICE);
 
         appWhiteList.add("com.vkontakte.android");
+        appWhiteList.add("com.cucumber007.voicenot");
 
         Log.d("cutag", "Service created");
     }
 
     @Override
     public void onDestroy() {
-        //super.onDestroy();
         Log.d("cutag", "Sevice destroyed");
     }
 
-    @Override
-    public void onInit(int status) {
+    public void onTtsInit(int status) {
         if (status == TextToSpeech.SUCCESS) {
-            int tts_result = tts.setLanguage(new Locale("en"));
+            LogUtil.logDebug("TTS succesfully inited");
+            int tts_result = ttsEngine.setLanguage(new Locale("en"));
 
-            tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+            ttsEngine.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                 @Override
                 public void onDone (String utteranceId) {
                     if(wasActive) {
@@ -91,33 +95,32 @@ public class VoiceNotService extends NotificationListenerService implements
 
             if (tts_result == TextToSpeech.LANG_MISSING_DATA
                     || tts_result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                Log.d("TTS", "Извините, этот язык не поддерживается");
+                Log.d("cutag", "Извините, этот язык не поддерживается");
             }
         } else {
-            Log.e("TTS", "Ошибка!");
+            Log.e("cutag", "Ошибка!");
         }
-
     }
 
 
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
-        if(active) {
-            //Log.d("cutag", "Posted");
+        LogUtil.logDebug("Notification got");
+        if(isServiceActive) {
+
             Bundle notification_info = sbn.getNotification().extras;
             String text = notification_info.getString("android.text");
             String author = notification_info.getString("android.title");
 
             String sourceApp = sbn.getPackageName();
-            //com.vkontakte.android
 
-            //Log.d("cutag", text);
+            Log.d("cutag", text);
             if(detectRussian(text+author)) {
-                int tts_result = tts.setLanguage(new Locale("ru"));
+                int tts_result = ttsEngine.setLanguage(new Locale("ru"));
             }
             else {
-                int tts_result = tts.setLanguage(new Locale("en"));
+                int tts_result = ttsEngine.setLanguage(new Locale("en"));
             }
 
 
@@ -137,15 +140,16 @@ public class VoiceNotService extends NotificationListenerService implements
             //ЛИСТАЙ ДАЛЬШЕ, А СЮДА НЕ СМОТРИ
             long time = System.currentTimeMillis();
             long delta = 0;
-            while (delta < 4000) {
+            while (delta < 1000) {
                 delta = System.currentTimeMillis() - time;
             }
 
-            if (plugged && appWhiteList.contains(sourceApp)) {
+            if (earphonesPlugged && appWhiteList.contains(sourceApp)) {
+                LogUtil.logDebug("Utterance started");
                 HashMap<String, String> params = new HashMap<String, String>();
                 params.put(TextToSpeech.Engine.KEY_PARAM_STREAM, String.valueOf(AudioManager.STREAM_MUSIC));
                 params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "myID");
-                tts.speak(message, TextToSpeech.QUEUE_ADD, params);
+                ttsEngine.speak(message, TextToSpeech.QUEUE_ADD, params);
                 message = "";
             }
 
@@ -159,7 +163,7 @@ public class VoiceNotService extends NotificationListenerService implements
     @Override
     public void onAudioFocusChange(int focusChange) {
         /*Log.d("cutag", "focus: "+focusChange);
-        if (plugged && focusChange == 1) {
+        if (earphonesPlugged && focusChange == 1) {
 
         }*/
     }
@@ -201,15 +205,15 @@ public class VoiceNotService extends NotificationListenerService implements
                 switch (state) {
                     case 0:
                         //Log.d(TAG, "Headset is unplugged");
-                        plugged = false;
+                        earphonesPlugged = false;
                         break;
                     case 1:
-                        //Log.d(TAG, "Headset is plugged");
-                        plugged = true;
+                        //Log.d(TAG, "Headset is earphonesPlugged");
+                        earphonesPlugged = true;
                         break;
                     default:
                         //Log.d(TAG, "I have no idea what the headset state is");
-                        plugged = false;
+                        earphonesPlugged = false;
                 }
             }
         }
