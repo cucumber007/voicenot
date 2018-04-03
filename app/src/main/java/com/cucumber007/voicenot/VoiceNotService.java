@@ -6,179 +6,108 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.media.AudioManager;
-import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.speech.tts.TextToSpeech;
-import android.speech.tts.UtteranceProgressListener;
-import android.util.Log;
+import android.support.annotation.Nullable;
 import android.view.KeyEvent;
+
+import com.cucumber007.reusables.utils.Callback;
+import com.cucumber007.reusables.utils.logging.LogUtil;
+import com.jakewharton.rxrelay2.BehaviorRelay;
 
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.Callable;
+
+import io.reactivex.Observable;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Function;
+import io.reactivex.functions.Function3;
+import rx.Subscription;
 
 
-public class VoiceNotService extends NotificationListenerService implements AudioManager.OnAudioFocusChangeListener  {
+public class VoiceNotService extends NotificationListenerService {
 
-    boolean isServiceActive = true;
-    boolean spellAuthor = false;
-    boolean headphonesOnly = true;
+    public static final int MIN_NOTIFICATION_TIMEOUT = 2000;
 
-    boolean headphonesPlugged = false;
-    boolean wasActive = false;
+    private boolean headphonesPlugged;
 
-    Context context = this;
-    TextToSpeech ttsEngine;
-    AudioManager audioManager;
-    MusicIntentReceiver musicIntentReceiver;
-    Set<String> appWhiteList = new HashSet<>();
+    private Context context = this;
 
-    private BroadcastReceiver updateSettingsReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            readSettings();
-        }
-    };
-
-    private BroadcastReceiver updateAppWhitelistReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(context);
-            appWhiteList = settings.getStringSet(AppWhitelistActivity.PARAMETER_APP_WHITELIST, new HashSet<>());
-            appWhiteList.add(getPackageName());
-        }
-    };
-
+    private Tts tts;
+    private Set<String> appWhiteList = new HashSet<>();
+    private PreferencesModel preferences;
+    private String lastMessage;
+    private long lastMessageTimeMillis;
 
     @Override
     public void onCreate() {
-        ttsEngine = new TextToSpeech(this, this::onTtsInit);
+        LogUtil.logDebug("Service created");
+        preferences = PreferencesModel.getInstance();
+        tts = new Tts(this);
 
-        IntentFilter intFilt = new IntentFilter(MainActivity.BROADCAST_SERVICE_UPDATE_SETTINGS);
-        registerReceiver(updateSettingsReceiver, intFilt);
+        registerReceiver(new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(context);
+                appWhiteList = settings.getStringSet(AppWhitelistActivity.PARAMETER_APP_WHITELIST, new HashSet<>());
+                appWhiteList.add(getPackageName());
+            }
+        }, new IntentFilter(AppWhitelistActivity.BROADCAST_SERVICE_UPDATE_APP_WHITELIST));
 
-        IntentFilter intFilt1 = new IntentFilter(AppWhitelistActivity.BROADCAST_SERVICE_UPDATE_APP_WHITELIST);
-        registerReceiver(updateAppWhitelistReceiver, intFilt1);
+        registerReceiver(new MusicIntentReceiver(), new IntentFilter(Intent.ACTION_HEADSET_PLUG));
 
-        musicIntentReceiver = new MusicIntentReceiver();
-        IntentFilter filter = new IntentFilter(Intent.ACTION_HEADSET_PLUG);
-        registerReceiver(musicIntentReceiver, filter);
-
-        audioManager = (AudioManager)this.getSystemService(Context.AUDIO_SERVICE);
-
-        //appWhiteList.add("com.vkontakte.android");
         appWhiteList.add(getPackageName());
-
-        readSettings();
-
-        Log.d("cutag", "Service created");
     }
-
-    @Override
-    public void onDestroy() {
-        Log.d("cutag", "Sevice destroyed");
-    }
-
-    private void readSettings() {
-        SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(context);
-        isServiceActive = settings.getBoolean(MainActivity.PARAMETER_SERVICE_STATUS, false);
-        spellAuthor = settings.getBoolean(MainActivity.PARAMETER_SPELL_TITLE, false);
-        headphonesOnly = settings.getBoolean(MainActivity.PARAMETER_SPELL_HEADPHONES_ONLY, true);
-    }
-
-    public void onTtsInit(int status) {
-        if (status == TextToSpeech.SUCCESS) {
-            LogUtil.logDebug("TTS succesfully inited");
-            int tts_result = ttsEngine.setLanguage(new Locale("en"));
-
-            ttsEngine.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                @Override
-                public void onDone (String utteranceId) {
-                    if(wasActive) {
-                        sendMediaButton(context, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE);
-                    }
-                }
-
-                @Override
-                public void onStart (String utteranceId) {}
-
-                @Override
-                public void onError (String utteranceId) {
-                    Log.d("cutag", "error");
-                }
-            }
-            );
-
-            if (tts_result == TextToSpeech.LANG_MISSING_DATA
-                    || tts_result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                Log.d("cutag", "Извините, этот язык не поддерживается");
-            }
-        } else {
-            Log.e("cutag", "Ошибка!");
-        }
-    }
-
-
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         LogUtil.logDebug("Notification got");
-        if(isServiceActive) {
 
-            boolean isMessage = false;
-            Bundle notification_info = sbn.getNotification().extras;
-            String text = notification_info.getString("android.text");
-            String title = notification_info.getString("android.title");
-            if (text == null) text = "";
-            if (title == null) title = "";
+        if (!preferences.isServiceActiveSetting().load()) return;
+        if ((System.currentTimeMillis() - lastMessageTimeMillis)
+                < MIN_NOTIFICATION_TIMEOUT) return;
+        lastMessageTimeMillis = System.currentTimeMillis();
 
-            String sourceApp = sbn.getPackageName();
+        String text = sbn.getNotification().extras.getString("android.text");
+        String title = sbn.getNotification().extras.getString("android.title");
+        if (text == null) return;
+        if (title == null) title = "";
 
-            String message;
-            if (spellAuthor)
-                if (isMessage)
-                    message = "от " + title + "." + text;
-                else message = title + "." + text;
-            else message = text;
+        String sourceAppPackage = sbn.getPackageName();
 
-            if (message.length() > 0) {
+        String message;
+        if (preferences.spellTitleSetting().load())
+            message = title + "." + text;
+        else message = text;
 
-                int tts_result = ttsEngine.setLanguage(new Locale(detectRussian(text + title) ? "ru" : "en"));
+        if (message.equals(lastMessage)) return;
 
-                if (text.length() > 250)
-                    message = text.substring(0, 250) + ". Достигнуто ограничение длины сообщения.";
-
-                //ЛИСТАЙ ДАЛЬШЕ, А СЮДА НЕ СМОТРИ
-                long time = System.currentTimeMillis();
-                long delta = 0;
-                //todo
-                while (delta < 1000) {
-                    delta = System.currentTimeMillis() - time;
-                }
-
-                if ((headphonesPlugged || !headphonesOnly) && appWhiteList.contains(sourceApp)) {
-                    //LogUtil.logDebug("Utterance started");
-                    HashMap<String, String> params = new HashMap<String, String>();
-                    params.put(TextToSpeech.Engine.KEY_PARAM_STREAM, String.valueOf(AudioManager.STREAM_MUSIC));
-                    params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "myID");
-                    ttsEngine.speak(message, TextToSpeech.QUEUE_ADD, params);
-                }
-
-            }
+        if ((headphonesPlugged || preferences.headphonesOnlySetting().load())
+                && appWhiteList.contains(sourceAppPackage)) {
+            //LogUtil.logDebug("Utterance started");
+            lastMessage = message;
+            tts.speak(message);
         }
+
     }
 
     @Override
-    public void onAudioFocusChange(int focusChange) {
-        /*Log.d("cutag", "focus: "+focusChange);
-        if (headphonesPlugged && focusChange == 1) {
+    public void onNotificationRemoved(StatusBarNotification sbn) {}
 
-        }*/
+    @Override
+    public void onDestroy() {
+        tts.destroy();
+        LogUtil.logDebug("Service destroyed");
     }
 
+    ///////////////////////////////////////////////////////////////////////////
+    // Utils
+    ///////////////////////////////////////////////////////////////////////////
 
     private static void sendMediaButton(Context context, int keyCode) {
         KeyEvent keyEvent = new KeyEvent(KeyEvent.ACTION_UP, keyCode);
@@ -192,21 +121,10 @@ public class VoiceNotService extends NotificationListenerService implements Audi
         context.sendBroadcast(intent);
     }
 
-    @Override
-    public void onNotificationRemoved(StatusBarNotification sbn) {
 
-    };
-
-    private boolean detectRussian(String text) {
-        boolean res = false;
-        char[] chars = "абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ".toCharArray();
-        //todo
-        for (int i = 0; i < chars.length; i++) {
-            res = text.contains(String.valueOf(chars[i]));
-            if(res) break;
-        }
-        return res;
-    }
+    ///////////////////////////////////////////////////////////////////////////
+    // Recievers
+    ///////////////////////////////////////////////////////////////////////////
 
     private class MusicIntentReceiver extends BroadcastReceiver {
         @Override

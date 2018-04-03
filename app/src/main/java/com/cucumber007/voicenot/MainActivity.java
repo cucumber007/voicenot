@@ -6,30 +6,25 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
-import android.content.SharedPreferences.Editor;
 import android.graphics.BitmapFactory;
 import android.media.RingtoneManager;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.view.View;
 import android.widget.Switch;
+
+import com.cucumber007.reusables.utils.logging.LogUtil;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
+import butterknife.OnCheckedChanged;
 import butterknife.OnClick;
 
 
 public class MainActivity extends AppCompatActivity {
 
-    private SharedPreferences settings;
-    private Editor editor;
     private Context context = this;
-
-    public static final String PARAMETER_SERVICE_STATUS = "service_status";
-    public static final String PARAMETER_SPELL_TITLE = "spell_title";
-    public static final String PARAMETER_SPELL_HEADPHONES_ONLY = "headphones_only";
 
     public static final String BROADCAST_SERVICE_UPDATE_SETTINGS = "com.cucumber007.update_settings_broadcast";
 
@@ -38,6 +33,8 @@ public class MainActivity extends AppCompatActivity {
     @BindView(R.id.switch_title) Switch switchTitle;
     @BindView(R.id.switch_headphones) Switch switchHeadphones;
 
+    private PreferencesModel preferences;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,39 +42,18 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         ButterKnife.bind(this);
         setSupportActionBar(toolbar);
+        preferences = PreferencesModel.getInstance();
 
-        settings = PreferenceManager.getDefaultSharedPreferences(this);
-
-        switchActive.setChecked(settings.getBoolean(PARAMETER_SERVICE_STATUS, false));
-        switchTitle.setChecked(settings.getBoolean(PARAMETER_SPELL_TITLE, false));
-        switchHeadphones.setChecked(settings.getBoolean(PARAMETER_SPELL_HEADPHONES_ONLY, false));
+        switchActive.setChecked(preferences.isServiceActiveSetting().load());
+        switchTitle.setChecked(preferences.spellTitleSetting().load());
+        switchHeadphones.setChecked(preferences.headphonesOnlySetting().load());
 
         startVoiceNotService();
-    }
-
-    @Override
-    protected void onStop() {
-        commitSettings();
-        super.onStop();
-    }
-
-    private void commitSettings() {
-        editor = settings.edit();
-        editor.putBoolean(PARAMETER_SERVICE_STATUS, switchActive.isChecked());
-        editor.putBoolean(PARAMETER_SPELL_TITLE, switchTitle.isChecked());
-        editor.putBoolean(PARAMETER_SPELL_HEADPHONES_ONLY, switchHeadphones.isChecked());
-        editor.commit();
     }
 
     private void startVoiceNotService() {
         Intent serviceIntent = new Intent(this, VoiceNotService.class);
         startService(serviceIntent);
-    }
-
-    private void sendUpdateSettingsBroadcast() {
-        commitSettings();
-        Intent intent = new Intent(BROADCAST_SERVICE_UPDATE_SETTINGS);
-        sendBroadcast(intent);
     }
 
     private boolean isVoiceNotServiceRunning() {
@@ -91,10 +67,10 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    private void sendTestNotification() {
+    private void sendTestNotification(String title, String text) {
         Notification.Builder notificationBuilder = new Notification.Builder(this);
-        notificationBuilder.setContentTitle("Hey")
-                .setContentText("It's working!")
+        notificationBuilder.setContentTitle(title)
+                .setContentText(text)
                 .setSmallIcon(R.drawable.icon)
                 .setLargeIcon(BitmapFactory.decodeResource(getResources(), R.drawable.icon))
                 .setPriority(Notification.PRIORITY_MAX)
@@ -110,9 +86,19 @@ public class MainActivity extends AppCompatActivity {
     // OnClick
     ///////////////////////////////////////////////////////////////////////////
 
-    @OnClick({R.id.switch_active, R.id.switch_title, R.id.switch_headphones})
-    public void onClick() {
-        sendUpdateSettingsBroadcast();
+    @OnCheckedChanged(R.id.switch_active)
+    void onActive(boolean value) {
+        preferences.isServiceActiveSetting().save(value);
+    }
+
+    @OnCheckedChanged(R.id.switch_headphones)
+    void onHeadphones(boolean value) {
+        preferences.headphonesOnlySetting().save(value);
+    }
+
+    @OnCheckedChanged(R.id.switch_title)
+    void onTitle(boolean value) {
+        preferences.spellTitleSetting().save(value);
     }
 
     @OnClick(R.id.permissions_button)
@@ -121,15 +107,24 @@ public class MainActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
-    @OnClick(R.id.notification_button)
-    public void onClick2() {
-        LogUtil.logDebug("Service active = ", isVoiceNotServiceRunning());
-        sendTestNotification();
-    }
-
 
     @OnClick(R.id.app_whitelist_button)
     public void onClick3() {
         startActivity(new Intent(this, AppWhitelistActivity.class));
+    }
+
+    @OnClick({R.id.b_test_en, R.id.b_test_ru, R.id.b_test_ua})
+    public void onClick(View view) {
+        switch (view.getId()) {
+            case R.id.b_test_en:
+                sendTestNotification("English test notification", "Hey, it's working!");
+                break;
+            case R.id.b_test_ru:
+                sendTestNotification("Russian test notification", "Оно работает!");
+                break;
+            case R.id.b_test_ua:
+                sendTestNotification("Ukrainian test notification", "Воно працює!");
+                break;
+        }
     }
 }
