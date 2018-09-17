@@ -31,6 +31,7 @@ public class Tts {
     @Nullable private TextToSpeech ukrainianTtsEngine;
     private Context context;
     private Disposable subscription;
+    private TextToSpeech textToSpeech;
 
 
     public Tts(Context context) {
@@ -40,12 +41,11 @@ public class Tts {
                 createTtsObservable(EN).doOnNext(it -> englishTtsEngine = it),
                 createTtsObservable(RU).doOnNext(it -> russianTtsEngine = it),
                 createTtsObservable(UA).doOnNext(it -> ukrainianTtsEngine = it),
-                (textToSpeech, textToSpeech2, textToSpeech3) -> null
+                (textToSpeech, textToSpeech2, textToSpeech3) -> "Finish"
         ).subscribe();
     }
 
     public void speak(String text) {
-        TextToSpeech textToSpeech;
         String language = detectTextLanguage(text);
         switch (language) {
             case EN: textToSpeech = englishTtsEngine; break;
@@ -62,32 +62,48 @@ public class Tts {
         params.put(TextToSpeech.Engine.KEY_PARAM_STREAM, String.valueOf(AudioManager.STREAM_MUSIC));
         params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "myID");
         if (textToSpeech != null) textToSpeech.speak(text, TextToSpeech.QUEUE_ADD, params);
-        else if(englishTtsEngine != null) englishTtsEngine.speak("Text to speech error",TextToSpeech.QUEUE_ADD, params);
+        else {
+            if(englishTtsEngine != null) englishTtsEngine.speak("Text to speech error",
+                    TextToSpeech.QUEUE_ADD, params);
+        }
+    }
+
+    public void stopUtterance() {
+        if (textToSpeech != null) textToSpeech.stop();
     }
 
     private Observable<TextToSpeech> createTtsObservable(String language) {
-        class TtsWrapper {
-            private TextToSpeech tts;
-            public TtsWrapper(Context context, Callback<TextToSpeech> callback) {
-                tts = new TextToSpeech(context, status -> {
-                    if (status == TextToSpeech.SUCCESS) {
-                        LogUtil.logDebug("TTS successfully inited");
-                        int tts_result = tts.setLanguage(new Locale(language));
-
-                        if (tts_result == TextToSpeech.LANG_MISSING_DATA
-                                || tts_result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                            LogUtil.logDebug("This language is not supported", language);
-                        } else callback.onReady(tts);
-                    } else {
-                        LogUtil.logDebug("Unknown error");
-                    }
-                });
-            }
-        }
         BehaviorRelay<TextToSpeech> relay = BehaviorRelay.create();
-        new TtsWrapper(context, relay::accept);
+        new TtsWrapper(context, language, relay::accept);
         return relay;
     }
+
+    class TtsWrapper {
+
+        private TextToSpeech tts;
+
+        public TtsWrapper(Context context, String language, Callback<TextToSpeech> callback) {
+            tts = new TextToSpeech(context, status -> {
+                if (status == TextToSpeech.SUCCESS) {
+                    LogUtil.logDebug("TTS successfully inited");
+                    int tts_result = tts.setLanguage(
+                            language.equals(UA) ? new Locale("ukr") : new Locale(language)
+                    );
+
+                    if (tts_result != TextToSpeech.SUCCESS) {
+                        LogUtil.logDebug("This language is not supported, error code = ",
+                                tts_result, language);
+                    } else {
+                        if (tts != null) callback.onReady(tts);
+                        else LogUtil.logDebug("TTS = null while init()!");
+                    }
+                } else {
+                    LogUtil.logDebug("Unknown error");
+                }
+            });
+        }
+    }
+
 
     private String getEndIndicatorText(String language) {
         switch (language) {

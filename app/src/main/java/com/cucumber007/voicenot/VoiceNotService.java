@@ -5,29 +5,20 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.media.AudioManager;
 import android.preference.PreferenceManager;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
-import android.speech.tts.TextToSpeech;
-import android.support.annotation.Nullable;
 import android.view.KeyEvent;
 
-import com.cucumber007.reusables.utils.Callback;
 import com.cucumber007.reusables.utils.logging.LogUtil;
-import com.jakewharton.rxrelay2.BehaviorRelay;
 
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Locale;
 import java.util.Set;
-import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
 
 import io.reactivex.Observable;
+import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.Function;
-import io.reactivex.functions.Function3;
-import rx.Subscription;
 
 
 public class VoiceNotService extends NotificationListenerService {
@@ -44,22 +35,31 @@ public class VoiceNotService extends NotificationListenerService {
     private String lastMessage;
     private long lastMessageTimeMillis;
 
+    private Disposable timerSubscription;
+    private BroadcastReceiver appWhitelistReceiver;
+    private BroadcastReceiver musicIntentReceiver;
+
+    private String linkRegex = "https?:\\/\\/(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{2,256}\\.[a-z]{2,4}\\b([-a-zA-Z0-9@:%_\\+.~#?&//=]*)";
+
+
     @Override
     public void onCreate() {
         LogUtil.logDebug("Service created");
         preferences = PreferencesModel.getInstance();
         tts = new Tts(this);
 
-        registerReceiver(new BroadcastReceiver() {
+        appWhitelistReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(context);
                 appWhiteList = settings.getStringSet(AppWhitelistActivity.PARAMETER_APP_WHITELIST, new HashSet<>());
                 appWhiteList.add(getPackageName());
             }
-        }, new IntentFilter(AppWhitelistActivity.BROADCAST_SERVICE_UPDATE_APP_WHITELIST));
+        };
+        registerReceiver(appWhitelistReceiver, new IntentFilter(AppWhitelistActivity.BROADCAST_SERVICE_UPDATE_APP_WHITELIST));
 
-        registerReceiver(new MusicIntentReceiver(), new IntentFilter(Intent.ACTION_HEADSET_PLUG));
+        musicIntentReceiver = new MusicIntentReceiver();
+        registerReceiver(musicIntentReceiver, new IntentFilter(Intent.ACTION_HEADSET_PLUG));
 
         appWhiteList.add(getPackageName());
     }
@@ -85,14 +85,22 @@ public class VoiceNotService extends NotificationListenerService {
             message = title + "." + text;
         else message = text;
 
+        String finalMessage = message.replaceAll(linkRegex, " LINK ");
+
         if (message.equals(lastMessage)) return;
 
-        if ((headphonesPlugged || preferences.headphonesOnlySetting().load())
-                && appWhiteList.contains(sourceAppPackage)) {
-            //LogUtil.logDebug("Utterance started");
-            lastMessage = message;
-            tts.speak(message);
-        }
+        timerSubscription = Observable.timer(1000, TimeUnit.MILLISECONDS, AndroidSchedulers.mainThread())
+                .onErrorResumeNext(throwable -> {
+                    return Observable.never();
+                })
+                .subscribe(it -> {
+            if ((headphonesPlugged || !preferences.headphonesOnlySetting().load())
+                    && appWhiteList.contains(sourceAppPackage)) {
+                //LogUtil.logDebug("Utterance started");
+                lastMessage = finalMessage;
+                tts.speak(finalMessage);
+            }
+        });
 
     }
 
@@ -101,7 +109,10 @@ public class VoiceNotService extends NotificationListenerService {
 
     @Override
     public void onDestroy() {
+        unregisterReceiver(appWhitelistReceiver);
+        unregisterReceiver(musicIntentReceiver);
         tts.destroy();
+        if (timerSubscription != null) timerSubscription.dispose();
         LogUtil.logDebug("Service destroyed");
     }
 
@@ -123,7 +134,7 @@ public class VoiceNotService extends NotificationListenerService {
 
 
     ///////////////////////////////////////////////////////////////////////////
-    // Recievers
+    // Receivers
     ///////////////////////////////////////////////////////////////////////////
 
     private class MusicIntentReceiver extends BroadcastReceiver {
@@ -132,17 +143,16 @@ public class VoiceNotService extends NotificationListenerService {
             if (intent.getAction().equals(Intent.ACTION_HEADSET_PLUG)) {
                 int state = intent.getIntExtra("state", -1);
                 switch (state) {
-                    case 0:
-                        //Log.d(TAG, "Headset is unplugged");
-                        headphonesPlugged = false;
-                        break;
                     case 1:
                         //Log.d(TAG, "Headset is headphonesPlugged");
                         headphonesPlugged = true;
                         break;
+                    case 0:
                     default:
-                        //Log.d(TAG, "I have no idea what the headset state is");
+                        //Log.d(TAG, "Headset is unplugged");
                         headphonesPlugged = false;
+                        tts.stopUtterance();
+                        break;
                 }
             }
         }
