@@ -1,13 +1,17 @@
 package com.cucumber007.voicenot;
 
-import android.content.Context;
 import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
 
 import com.cucumber007.reusables.ContextApplication;
+import com.cucumber007.reusables.preferences.BasePreferenceModel;
 import com.cucumber007.reusables.preferences.BooleanPreference;
 import com.cucumber007.reusables.preferences.Setting;
-import com.cucumber007.voicenot.reusables.BasePreferenceModel;
+import com.cucumber007.reusables.utils.logging.LogUtil;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 
 public class PreferencesModel extends BasePreferenceModel {
     private static PreferencesModel instance;
@@ -49,6 +53,27 @@ public class PreferencesModel extends BasePreferenceModel {
             @Override
             public Boolean load() {
                 return getPreferences().getBoolean(getKey(), true);
+            }
+        };
+    }
+
+    public Setting<Set<String>> appWhitelistSetting() {
+        return new Setting<Set<String>>() {
+            @Override
+            public String getKey() {
+                return "appWhitelist";
+            }
+
+            @Override
+            public void save(Set<String> appItems) {
+                getPreferences().edit().putStringSet(this.getKey(),
+                        appItems).apply();
+                LogUtil.logList(new ArrayList<>(appItems));
+            }
+
+            @Override
+            public Set<String> load() {
+                return getPreferences().getStringSet(getKey(), new HashSet<>());
             }
         };
     }

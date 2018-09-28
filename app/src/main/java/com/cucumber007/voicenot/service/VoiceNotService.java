@@ -1,4 +1,4 @@
-package com.cucumber007.voicenot;
+package com.cucumber007.voicenot.service;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -11,6 +11,8 @@ import android.service.notification.StatusBarNotification;
 import android.view.KeyEvent;
 
 import com.cucumber007.reusables.utils.logging.LogUtil;
+import com.cucumber007.voicenot.PreferencesModel;
+import com.cucumber007.voicenot.view.AppWhitelistActivity;
 
 import java.util.HashSet;
 import java.util.Set;

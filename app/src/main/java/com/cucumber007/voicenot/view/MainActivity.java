@@ -1,4 +1,4 @@
-package com.cucumber007.voicenot;
+package com.cucumber007.voicenot.view;
 
 import android.app.ActivityManager;
 import android.app.ActivityManager.RunningServiceInfo;
@@ -16,6 +16,10 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.View;
 import android.widget.Switch;
+
+import com.cucumber007.voicenot.PreferencesModel;
+import com.cucumber007.voicenot.R;
+import com.cucumber007.voicenot.service.VoiceNotService;
 
 import java.util.Random;
 

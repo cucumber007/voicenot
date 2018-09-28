@@ -10,7 +10,7 @@
         android:name=".VoicenotApplication">
 
         <service
-            android:name=".VoiceNotService"
+            android:name=".service.VoiceNotService"
             android:label="VoiceNotListener"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
@@ -19,7 +19,7 @@
         </service>
 
         <activity
-            android:name=".MainActivity"
+            android:name=".view.MainActivity"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
@@ -27,7 +27,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <activity android:name=".AppWhitelistActivity">
+        <activity android:name=".view.AppWhitelistActivity">
         </activity>
     </application>
 
