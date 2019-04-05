@@ -4,8 +4,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SharedPreferences;
-import android.preference.PreferenceManager;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.view.KeyEvent;
@@ -50,12 +48,12 @@ public class VoiceNotService extends NotificationListenerService {
         preferences = PreferencesModel.getInstance();
         tts = new Tts(this);
 
+        appWhiteList = PreferencesModel.getInstance().appWhitelistSetting().load();
+
         appWhitelistReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(context);
-                appWhiteList = settings.getStringSet(AppWhitelistActivity.PARAMETER_APP_WHITELIST, new HashSet<>());
-                appWhiteList.add(getPackageName());
+                appWhiteList = PreferencesModel.getInstance().appWhitelistSetting().load();
             }
         };
         registerReceiver(appWhitelistReceiver, new IntentFilter(AppWhitelistActivity.BROADCAST_SERVICE_UPDATE_APP_WHITELIST));
@@ -63,11 +61,12 @@ public class VoiceNotService extends NotificationListenerService {
         musicIntentReceiver = new MusicIntentReceiver();
         registerReceiver(musicIntentReceiver, new IntentFilter(Intent.ACTION_HEADSET_PLUG));
 
-        appWhiteList.add(getPackageName());
     }
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
+        //todo handle static notifications
+        //todo performance
         LogUtil.logDebug("Notification got");
 
         if (!preferences.isServiceActiveSetting().load()) return;
@@ -93,6 +92,7 @@ public class VoiceNotService extends NotificationListenerService {
 
         timerSubscription = Observable.timer(1000, TimeUnit.MILLISECONDS, AndroidSchedulers.mainThread())
                 .onErrorResumeNext(throwable -> {
+                    LogUtil.logError(throwable);
                     return Observable.never();
                 })
                 .subscribe(it -> {

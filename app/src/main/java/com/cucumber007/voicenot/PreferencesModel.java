@@ -73,7 +73,9 @@ public class PreferencesModel extends BasePreferenceModel {
 
             @Override
             public Set<String> load() {
-                return getPreferences().getStringSet(getKey(), new HashSet<>());
+                Set<String> res = getPreferences().getStringSet(getKey(), new HashSet<>());
+                res.add(VoicenotApplication.getContext().getPackageName());
+                return res;
             }
         };
     }
