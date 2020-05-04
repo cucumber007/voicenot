@@ -4,22 +4,21 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
-import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
-import android.support.v7.widget.Toolbar;
 import android.view.MenuItem;
 import android.widget.ProgressBar;
 
-import com.cucumber007.voicenot.PreferencesModel;
 import com.cucumber007.voicenot.R;
+import com.cucumber007.voicenot.SharedPrefs;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import butterknife.BindView;
-import butterknife.ButterKnife;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 import io.reactivex.Observable;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.Disposable;
@@ -31,35 +30,39 @@ import static android.view.View.GONE;
 public class AppWhitelistActivity extends AppCompatActivity {
 
     private Context context = this;
-    private AppsCheckableRecyclerAdapter adapter;
+    private AppsAdapter adapter;
 
     public static final String PARAMETER_APP_WHITELIST = "app_whitelist";
     public static final String BROADCAST_SERVICE_UPDATE_APP_WHITELIST = "com.cucumber007.update_app_whitelist";
 
-    @BindView(R.id.app_recycler_view) RecyclerView appRecyclerView;
-    @BindView(R.id.toolbar) Toolbar toolbar;
-    @BindView(R.id.progressBar2) ProgressBar progressBar;
+    RecyclerView appRecyclerView;
+    Toolbar toolbar;
+    ProgressBar progressBar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_app_whitelist);
-        ButterKnife.bind(this);
+
+        appRecyclerView = findViewById(R.id.app_recycler_view);
+        toolbar = findViewById(R.id.toolbar);
+        progressBar = findViewById(R.id.progressBar2);
+
         setSupportActionBar(toolbar);
         getSupportActionBar().setHomeButtonEnabled(true);
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
 
-        final Set<String> selectedAppPackages = PreferencesModel.getInstance().appWhitelistSetting().load();
+        final Set<String> selectedAppPackages = new HashSet(SharedPrefs.INSTANCE.getAppWhitelistSetting().load());
 
         appRecyclerView.setLayoutManager(new LinearLayoutManager(context));
-        adapter = new AppsCheckableRecyclerAdapter(context);
-        adapter.setOnItemSelectedListener((AppItem item, boolean isSelected, Set<Integer> selectedPositions, List<AppItem> items) -> {
+        adapter = new AppsAdapter();
+        adapter.setOnItemSelectedListener((AppItem item, boolean isSelected, Set<Integer> selectedPositions, List<? extends AppItem> items) -> {
             getSupportActionBar().setTitle(selectedPositions.size() + " items checked");
-            PreferencesModel.getInstance().appWhitelistSetting().save(new HashSet<String>(
+            SharedPrefs.INSTANCE.getAppWhitelistSetting().save(new ArrayList(new HashSet<String>(
                     Observable.fromIterable(selectedPositions)
-                            .map(it -> ((AppItem)items.get(it)).getPackageName())
+                            .map(it -> ((AppItem) items.get(it)).getPackageName())
                             .toList().blockingGet()
-            ));
+            )));
 
         });/*, data, (position, state) -> {
             getSupportActionBar().setTitle(adapter.getCheckedCount() + " items checked");
@@ -100,7 +103,7 @@ public class AppWhitelistActivity extends AppCompatActivity {
                     adapter.setSelectedPositions(
                             new HashSet<>(Observable.range(0, selectedAppPackages.size()).toList().blockingGet())
                     );
-                    adapter.setItemsAndUpdate(data);
+                    adapter.updateItems(data);
                 });
     }
 

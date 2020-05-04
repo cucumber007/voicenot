@@ -8,8 +8,7 @@ import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.view.KeyEvent;
 
-import com.cucumber007.reusables.utils.logging.LogUtil;
-import com.cucumber007.voicenot.PreferencesModel;
+import com.cucumber007.voicenot.SharedPrefs;
 import com.cucumber007.voicenot.view.AppWhitelistActivity;
 
 import java.util.HashSet;
@@ -31,7 +30,6 @@ public class VoiceNotService extends NotificationListenerService {
 
     private Tts tts;
     private Set<String> appWhiteList = new HashSet<>();
-    private PreferencesModel preferences;
     private String lastMessage;
     private long lastMessageTimeMillis;
 
@@ -44,16 +42,15 @@ public class VoiceNotService extends NotificationListenerService {
 
     @Override
     public void onCreate() {
-        LogUtil.logDebug("Service created");
-        preferences = PreferencesModel.getInstance();
+//        LogUtil.logDebug("Service created");
         tts = new Tts(this);
 
-        appWhiteList = PreferencesModel.getInstance().appWhitelistSetting().load();
+        appWhiteList = new HashSet(SharedPrefs.INSTANCE.getAppWhitelistSetting().load());
 
         appWhitelistReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                appWhiteList = PreferencesModel.getInstance().appWhitelistSetting().load();
+                appWhiteList = new HashSet(SharedPrefs.INSTANCE.getAppWhitelistSetting().load());
             }
         };
         registerReceiver(appWhitelistReceiver, new IntentFilter(AppWhitelistActivity.BROADCAST_SERVICE_UPDATE_APP_WHITELIST));
@@ -67,9 +64,9 @@ public class VoiceNotService extends NotificationListenerService {
     public void onNotificationPosted(StatusBarNotification sbn) {
         //todo handle static notifications
         //todo performance
-        LogUtil.logDebug("Notification got");
+//        LogUtil.logDebug("Notification got");
 
-        if (!preferences.isServiceActiveSetting().load()) return;
+        if (!SharedPrefs.INSTANCE.isServiceActiveSetting().load()) return;
         if ((System.currentTimeMillis() - lastMessageTimeMillis)
                 < MIN_NOTIFICATION_TIMEOUT) return;
         lastMessageTimeMillis = System.currentTimeMillis();
@@ -82,7 +79,7 @@ public class VoiceNotService extends NotificationListenerService {
         String sourceAppPackage = sbn.getPackageName();
 
         String message;
-        if (preferences.spellTitleSetting().load())
+        if (SharedPrefs.INSTANCE.getSpellTitleSetting().load())
             message = title + "." + text;
         else message = text;
 
@@ -92,11 +89,11 @@ public class VoiceNotService extends NotificationListenerService {
 
         timerSubscription = Observable.timer(1000, TimeUnit.MILLISECONDS, AndroidSchedulers.mainThread())
                 .onErrorResumeNext(throwable -> {
-                    LogUtil.logError(throwable);
+//                    LogUtil.logError(throwable);
                     return Observable.never();
                 })
                 .subscribe(it -> {
-            if ((headphonesPlugged || !preferences.headphonesOnlySetting().load())
+            if ((headphonesPlugged || !SharedPrefs.INSTANCE.getHeadphonesOnlySetting().load())
                     && appWhiteList.contains(sourceAppPackage)) {
                 //LogUtil.logDebug("Utterance started");
                 lastMessage = finalMessage;
@@ -115,7 +112,7 @@ public class VoiceNotService extends NotificationListenerService {
         unregisterReceiver(musicIntentReceiver);
         tts.destroy();
         if (timerSubscription != null) timerSubscription.dispose();
-        LogUtil.logDebug("Service destroyed");
+//        LogUtil.logDebug("Service destroyed");
     }
 
     ///////////////////////////////////////////////////////////////////////////

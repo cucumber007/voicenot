@@ -3,15 +3,13 @@ package com.cucumber007.voicenot.service;
 import android.content.Context;
 import android.media.AudioManager;
 import android.speech.tts.TextToSpeech;
-import android.support.annotation.Nullable;
 
-import com.cucumber007.reusables.utils.Callback;
-import com.cucumber007.reusables.utils.logging.LogUtil;
 import com.jakewharton.rxrelay2.BehaviorRelay;
 
 import java.util.HashMap;
 import java.util.Locale;
 
+import androidx.annotation.Nullable;
 import io.reactivex.Observable;
 import io.reactivex.disposables.Disposable;
 
@@ -85,20 +83,20 @@ public class Tts {
         public TtsWrapper(Context context, String language, Callback<TextToSpeech> callback) {
             tts = new TextToSpeech(context, status -> {
                 if (status == TextToSpeech.SUCCESS) {
-                    LogUtil.logDebug("TTS successfully inited");
+//                    LogUtil.logDebug("TTS successfully inited");
                     int tts_result = tts.setLanguage(
                             language.equals(UA) ? new Locale("ukr") : new Locale(language)
                     );
 
                     if (tts_result != TextToSpeech.SUCCESS) {
-                        LogUtil.logDebug("This language is not supported, error code = ",
-                                tts_result, language);
+//                        LogUtil.logDebug("This language is not supported, error code = ",
+//                                tts_result, language);
                     } else {
                         if (tts != null) callback.onReady(tts);
-                        else LogUtil.logDebug("TTS = null while init()!");
+//                        else LogUtil.logDebug("TTS = null while init()!");
                     }
                 } else {
-                    LogUtil.logDebug("Unknown error");
+//                    LogUtil.logDebug("Unknown error");
                 }
             });
         }
@@ -139,5 +137,9 @@ public class Tts {
 
     public void destroy() {
         if (subscription != null) subscription.dispose();
+    }
+
+    public interface Callback<T> {
+        void onReady(T val);
     }
 }
